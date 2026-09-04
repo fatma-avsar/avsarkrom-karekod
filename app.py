@@ -2,7 +2,7 @@ import streamlit as st
 import sqlite3
 import os
 
-# Sayfa ayarları - Telefon ekranına uyumlu olması için centered kullanıyoruz
+# Sayfa ayarları
 st.set_page_config(page_title="Avşar Krom Ürün Detayı", layout="centered")
 
 # URL'den ürün kodunu alma (Örn: ?urun=TZG-001)
@@ -25,6 +25,8 @@ if urun_kodu:
         st.title(f"Avşar Krom - {urun[1]}") 
         st.subheader(f"Stok Kodu: {urun[0]}")
         
+        st.divider() # Araya şık bir çizgi ekler
+        
         # Ekranı ikiye bölüyoruz (Telefonda alt alta görünür)
         col1, col2 = st.columns(2)
         
@@ -36,14 +38,22 @@ if urun_kodu:
                 st.info("Bu ürün için görsel yüklenmemiş.")
             
         with col2:
-            st.markdown(f"**Ölçüler:** {urun[2]}")
-            st.markdown(f"**Malzeme:** {urun[3]}")
-            st.markdown(f"**Teknik Detaylar:** {urun[6]}")
+            # Yazıları büyütmek için "###" (H3 Başlık) formatını kullanıyoruz
+            st.markdown(f"### **Ölçüler:** {urun[2]}")
+            st.markdown(f"### **Malzeme:** {urun[3]}")
+            st.markdown(f"### **Teknik Detaylar:** {urun[6]}")
+            
+            st.write("") # Görsel ile fiyat arasına biraz boşluk
             
             # Fiyatı büyük ve dikkat çekici göster
             st.metric(label="Güncel Fiyat", value=f"{urun[4]:,.2f} ₺")
             
-        st.success("Bu ürün Avşar Krom Yeşilkaraman tesislerinde üretilmiştir.")
+            # KDV uyarısı
+            st.markdown("*(Fiyatlara KDV dahil değildir)*")
+            
+        st.divider()
+        
+        st.success("Bu ürün Avşar Krom tesislerinde üretilmiştir.")
     else:
         st.error("Ürün bulunamadı veya sistemden kaldırılmış.")
 else:
