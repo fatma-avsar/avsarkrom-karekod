@@ -3,9 +3,10 @@ import sqlite3
 import os
 import urllib.parse
 
-st.set_page_config(page_title="Avşar Krom Sistemi", layout="centered", initial_sidebar_state="collapsed")
+# initial_sidebar_state="auto" yaptık ki telefonda 3 çizgi (menü) olarak görünsün, bilgisayarda açık gelsin.
+st.set_page_config(page_title="Avşar Krom Sistemi", layout="centered", initial_sidebar_state="auto")
 
-# --- VERİTABANI BAĞLANTISI ---
+# --- VERİTABANI İŞLEMLERİ ---
 def urun_getir(kod):
     conn = sqlite3.connect('avsarkrom.db')
     c = conn.cursor()
@@ -13,6 +14,22 @@ def urun_getir(kod):
     veri = c.fetchone()
     conn.close()
     return veri
+
+def kategorileri_getir():
+    conn = sqlite3.connect('avsarkrom.db')
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT kategori FROM urunler WHERE kategori IS NOT NULL AND kategori != ''")
+    kategoriler = [row[0] for row in c.fetchall()]
+    conn.close()
+    return kategoriler
+
+def kategori_urunleri_getir(kategori):
+    conn = sqlite3.connect('avsarkrom.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM urunler WHERE kategori=?", (kategori,))
+    urunler = c.fetchall()
+    conn.close()
+    return urunler
 
 # --- URL KONTROLLERİ ---
 query_params = st.query_params
@@ -33,21 +50,18 @@ if sayfa == "yonetim":
         st.divider()
         
         st.subheader("Ürün Düzenle veya Yeni Ekle")
-        st.info("💡 Var olan bir ürünü düzenlemek için stok kodunu aşağıya yazın ve Enter'a basın. Bilgiler otomatik dolacaktır.")
+        st.info("💡 Var olan bir ürünü düzenlemek için stok kodunu aşağıya yazın ve Enter'a basın.")
         
-        # Ürün Çağırma Alanı
         aranan_kod = st.text_input("Düzenlenecek Stok Kodunu Girin (Yeni ekleyecekseniz boş bırakın):")
         
-        # Veritabanından mevcut ürünü çekme
         mevcut_urun = None
         if aranan_kod:
             mevcut_urun = urun_getir(aranan_kod)
             if mevcut_urun:
-                st.success(f"✅ {aranan_kod} kodlu ürün bulundu! Bilgileri aşağıdan güncelleyebilirsiniz.")
+                st.success(f"✅ {aranan_kod} kodlu ürün bulundu! Bilgileri güncelleyebilirsiniz.")
             else:
-                st.warning(f"⚠️ {aranan_kod} kodlu ürün bulunamadı. Yeni bir ürün olarak ekleyebilirsiniz.")
+                st.warning(f"⚠️ {aranan_kod} kodlu ürün bulunamadı. Yeni ürün olarak eklenecek.")
 
-        # Form varsayılan değerleri (Ürün bulunduysa içini doldurur, yoksa boş bırakır)
         def_kod = mevcut_urun[0] if mevcut_urun else aranan_kod
         def_ad = mevcut_urun[1] if mevcut_urun else ""
         def_olcu = mevcut_urun[2] if mevcut_urun else ""
@@ -57,7 +71,6 @@ if sayfa == "yonetim":
         def_detay = mevcut_urun[6] if mevcut_urun else ""
         def_stok = int(mevcut_urun[7]) if mevcut_urun and mevcut_urun[7] is not None else 0
 
-        # Form Alanı
         with st.form("urun_formu"):
             yeni_kod = st.text_input("Stok Kodu (Örn: EVY-2SA-160)", value=def_kod)
             yeni_kategori = st.text_input("Kategori (Örn: Evyeli Tezgahlar)", value=def_ad)
@@ -79,14 +92,32 @@ if sayfa == "yonetim":
                     ''', (yeni_kod, yeni_kategori, yeni_olculer, yeni_malzeme, yeni_fiyat, yeni_gorsel, yeni_detay, yeni_stok))
                     conn.commit()
                     conn.close()
-                    st.success(f"{yeni_kod} kodlu ürün başarıyla veritabanına kaydedildi! (Stok: {yeni_stok})")
+                    st.success(f"{yeni_kod} kodlu ürün başarıyla kaydedildi! (Stok: {yeni_stok})")
                 else:
                     st.error("Stok Kodu boş bırakılamaz!")
 
 # ==========================================
-# 2. MÜŞTERİ / KAREKOD SAYFASI
+# 2. MÜŞTERİ / KAREKOD / KATALOG SAYFASI
 # ==========================================
 else:
+    # --- YAN MENÜ (SIDEBAR) KATEGORİ LİSTESİ ---
+    st.sidebar.title("Katalog")
+    
+    if st.sidebar.button("🏠 Ana Sayfa / QR Okut", use_container_width=True):
+        st.query_params.clear()
+        st.session_state.secilen_kategori = None
+        st.rerun()
+        
+    st.sidebar.divider()
+    
+    kategoriler = kategorileri_getir()
+    for kat in kategoriler:
+        if st.sidebar.button(f"📁 {kat}", use_container_width=True):
+            st.query_params.clear() # Eğer bir ürün açıksa onu kapat
+            st.session_state.secilen_kategori = kat
+            st.rerun()
+
+    # --- SEPET HAFIZASI ---
     if 'sepet' not in st.session_state:
         st.session_state.sepet = []
 
@@ -97,6 +128,9 @@ else:
     def sepeti_temizle():
         st.session_state.sepet = []
 
+    # --- EKRAN GÖSTERİM KONTROLLERİ ---
+    
+    # DURUM 1: URL'de ürün kodu varsa (Karekod okutulmuş veya İncele butonuna basılmışsa)
     if urun_kodu:
         urun = urun_getir(urun_kodu)
         
@@ -146,10 +180,46 @@ else:
             
         else:
             st.error("Ürün bulunamadı veya sistemden kaldırılmış.")
+            
+    # DURUM 2: Menüden bir kategori seçilmişse
+    elif st.session_state.get('secilen_kategori'):
+        secili_kat = st.session_state.secilen_kategori
+        st.title(f"{secili_kat}")
+        st.write("Bu kategorideki ürünlerimiz:")
+        st.divider()
+        
+        urunler = kategori_urunleri_getir(secili_kat)
+        
+        if urunler:
+            # Ürünleri yan yana 2'li liste halinde gösterme
+            cols = st.columns(2, gap="large")
+            for i, u in enumerate(urunler):
+                with cols[i % 2]:
+                    with st.container(border=True):
+                        # Fotoğraf
+                        if os.path.exists(u[5]):
+                            st.image(u[5], use_container_width=True)
+                        else:
+                            st.write("*(Görsel Yok)*")
+                        
+                        # İsim ve Fiyat
+                        st.markdown(f"**{u[1]}**")
+                        st.caption(f"Stok: {u[0]}")
+                        st.markdown(f"<h4 style='color: #4CAF50;'>{u[4]:,.2f} ₺</h4>", unsafe_allow_html=True)
+                        
+                        # İncele Butonu
+                        if st.button("🔍 İncele", key=f"btn_{u[0]}", use_container_width=True):
+                            st.query_params["urun"] = u[0]
+                            st.rerun()
+        else:
+            st.info("Bu kategoride henüz ürün bulunmamaktadır.")
+
+    # DURUM 3: URL boş ve kategori seçilmemiş (Ana Sayfa)
     else:
         st.title("Avşar Krom - Sistem Girişi")
-        st.write("Lütfen ürün detaylarını görmek için bir ürün karekodu okutun.")
+        st.write("Lütfen ürün detaylarını görmek için bir ürün karekodu okutun veya sol üstteki menüden (☰) **Katalog**'a göz atın.")
 
+    # --- DİNAMİK TEKLİF SEPETİ VE WHATSAPP GÖNDERİMİ ---
     if len(st.session_state.sepet) > 0:
         st.write("")
         st.write("")
