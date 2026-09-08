@@ -3,21 +3,19 @@ import sqlite3
 import os
 import urllib.parse
 
-# Sayfa ayarları
 st.set_page_config(page_title="Avşar Krom Ürün Detayı", layout="centered")
 
-# --- SEPET (HAFIZA) SİSTEMİNİ BAŞLATMA ---
+# --- SEPET (HAFIZA) SİSTEMİ ---
 if 'sepet' not in st.session_state:
     st.session_state.sepet = []
 
-def sepete_ekle(kodu, adi, fiyat):
-    st.session_state.sepet.append({'kodu': kodu, 'adi': adi, 'fiyat': fiyat})
+def sepete_ekle(kodu, adi, fiyat, stok_durumu):
+    st.session_state.sepet.append({'kodu': kodu, 'adi': adi, 'fiyat': fiyat, 'durum': stok_durumu})
     st.success(f"✅ {adi} teklif sepetinize eklendi!")
 
 def sepeti_temizle():
     st.session_state.sepet = []
 
-# URL'den ürün kodunu alma
 query_params = st.query_params
 urun_kodu = query_params.get("urun", None)
 
@@ -36,6 +34,20 @@ if urun_kodu:
         st.title(f"Avşar Krom - {urun[1]}") 
         st.subheader(f"Stok Kodu: {urun[0]}")
         
+        # --- STOK / İMALAT KONTROLÜ ---
+        # urun[7] stok miktarını temsil eder. Eğer eski kayıtsa ve hata verirse 0 kabul et.
+        try:
+            stok_adedi = int(urun[7]) if urun[7] is not None else 0
+        except IndexError:
+            stok_adedi = 0
+            
+        if stok_adedi > 0:
+            st.success(f"📦 **Stokta Hazır** (Hemen Teslim)")
+            stok_durum_metni = "Stoktan Teslim"
+        else:
+            st.warning("⚙️ **Yeni İmalat** (Sipariş Üzerine Üretilir)")
+            stok_durum_metni = "Yeni İmalat"
+            
         st.divider() 
         
         col1, col2 = st.columns(2)
@@ -55,10 +67,9 @@ if urun_kodu:
             st.metric(label="Güncel Fiyat", value=f"{urun[4]:,.2f} ₺")
             st.markdown("*(Fiyatlara KDV dahil değildir)*")
             
-            # --- SEPETE EKLE BUTONU ---
             st.write("")
             if st.button("🛒 Bu Ürünü Teklif Sepetime Ekle", use_container_width=True):
-                sepete_ekle(urun[0], urun[1], urun[4])
+                sepete_ekle(urun[0], urun[1], urun[4], stok_durum_metni)
                 st.rerun()
                 
         st.divider()
@@ -69,40 +80,38 @@ else:
     st.title("Avşar Krom - Sistem Girişi")
     st.write("Lütfen ürün detaylarını görmek için bir ürün karekodu okutun.")
 
-
 # --- DİNAMİK TEKLİF SEPETİ VE WHATSAPP GÖNDERİMİ ---
 if len(st.session_state.sepet) > 0:
     st.markdown("---")
     st.header("🛒 Teklif Sepetiniz")
-    st.write("Seçtiğiniz ürünler aşağıda listelenmiştir. WhatsApp üzerinden anında teklif isteyebilirsiniz.")
     
     ara_toplam = 0
     mesaj_metni = "Merhaba Avşar Krom, aşağıdaki ürünler için sipariş/teklif detaylarını görüşmek istiyorum:\n\n"
     
-    # Sepetteki ürünleri listeleme
     for i, item in enumerate(st.session_state.sepet):
-        st.markdown(f"**{i+1}. {item['kodu']}** - {item['adi']} | **{item['fiyat']:,.2f} ₺**")
+        # Ekranda Gösterim
+        st.markdown(f"**{i+1}. {item['kodu']}** - {item['adi']} | *{item['durum']}* | **{item['fiyat']:,.2f} ₺**")
         ara_toplam += item['fiyat']
-        mesaj_metni += f"- {item['kodu']} {item['adi']}\n"
+        
+        # WhatsApp Mesajına Ekleme
+        mesaj_metni += f"- {item['kodu']} {item['adi']} ({item['durum']})\n"
         
     kdv = ara_toplam * 0.20
     genel_toplam = ara_toplam + kdv
     
-    mesaj_metni += f"\nAra Toplam: {ara_toplam:,.2f} ₺"
-    mesaj_metni += f"\nKDV (%20): {kdv:,.2f} ₺"
-    mesaj_metni += f"\nGenel Toplam: {genel_toplam:,.2f} ₺"
+    mesaj_metni += f"\nAra Toplam: {ara_toplam:,.2f} TL"
+    mesaj_metni += f"\nKDV (%20): {kdv:,.2f} TL"
+    mesaj_metni += f"\nGenel Toplam: {genel_toplam:,.2f} TL"
     
     st.markdown("---")
     st.write(f"**Ara Toplam:** {ara_toplam:,.2f} ₺")
     st.write(f"**KDV (%20):** {kdv:,.2f} ₺")
     st.subheader(f"Genel Toplam: {genel_toplam:,.2f} ₺")
     
-    # WhatsApp Butonu
     telefon = "905323333806"
     url_mesaj = urllib.parse.quote(mesaj_metni)
     whatsapp_url = f"https://wa.me/{telefon}?text={url_mesaj}"
     
-    # Buton tasarımı
     st.write("")
     st.markdown(f'''
         <a href="{whatsapp_url}" target="_blank" style="display: block; width: 100%; padding: 15px; background-color: #25D366; color: white; text-align: center; text-decoration: none; font-size: 18px; font-weight: bold; border-radius: 8px;">
@@ -115,7 +124,7 @@ if len(st.session_state.sepet) > 0:
         sepeti_temizle()
         st.rerun()
 
-# --- YÖNETİCİ PANELİ (Gizli) ---
+# --- YÖNETİCİ PANELİ ---
 st.write("")
 st.write("")
 with st.expander("Yetkili Girişi / Ürün Yönetimi"):
@@ -123,20 +132,28 @@ with st.expander("Yetkili Girişi / Ürün Yönetimi"):
     if sifre == "avsar2026":
         st.subheader("Yeni Ürün Ekle veya Güncelle")
         with st.form("urun_formu"):
-            yeni_kod = st.text_input("Stok Kodu (Örn: DVL-001)")
-            yeni_kategori = st.text_input("Kategori (Örn: Endüstriyel Davlumbaz)")
+            yeni_kod = st.text_input("Stok Kodu (Örn: DVL-OT-001)")
+            yeni_kategori = st.text_input("Kategori (Örn: Orta Tip Davlumbaz)")
             yeni_olculer = st.text_input("Ölçüler (Örn: 200x90x50 cm)")
             yeni_malzeme = st.text_input("Malzeme (Örn: 304 Kalite Paslanmaz Çelik)")
             yeni_fiyat = st.number_input("Fiyat (₺)", min_value=0.0, format="%.2f")
             yeni_gorsel = st.text_input("Görsel Yolu (Örn: gorseller/davlumbaz.png)")
             yeni_detay = st.text_area("Teknik Detaylar")
+            
+            # --- YENİ EKLENEN STOK KONTROL ALANI ---
+            yeni_stok = st.number_input("Stok Miktarı (Adet)", min_value=0, step=1, help="0 girerseniz ürün 'Yeni İmalat' olarak görünür.")
+            
             if st.form_submit_button("Ürünü Kaydet / Güncelle"):
                 if yeni_kod:
                     conn = sqlite3.connect('avsarkrom.db')
                     c = conn.cursor()
-                    c.execute('''INSERT OR REPLACE INTO urunler (urun_kodu, kategori, olculer, malzeme, fiyat, gorsel_yolu, teknik_detay) VALUES (?, ?, ?, ?, ?, ?, ?)''', (yeni_kod, yeni_kategori, yeni_olculer, yeni_malzeme, yeni_fiyat, yeni_gorsel, yeni_detay))
+                    c.execute('''
+                        INSERT OR REPLACE INTO urunler 
+                        (urun_kodu, kategori, olculer, malzeme, fiyat, gorsel_yolu, teknik_detay, stok_miktari) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (yeni_kod, yeni_kategori, yeni_olculer, yeni_malzeme, yeni_fiyat, yeni_gorsel, yeni_detay, yeni_stok))
                     conn.commit()
                     conn.close()
-                    st.success(f"{yeni_kod} kodlu ürün veritabanına kaydedildi!")
+                    st.success(f"{yeni_kod} kodlu ürün veritabanına kaydedildi! (Stok: {yeni_stok})")
                 else:
                     st.error("Stok Kodu boş bırakılamaz!")
