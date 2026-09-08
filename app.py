@@ -3,7 +3,6 @@ import sqlite3
 import os
 import urllib.parse
 
-# Sayfa ayarları - Daha ferah görünüm için genişlik ayarları
 st.set_page_config(page_title="Avşar Krom Sistemi", layout="centered", initial_sidebar_state="collapsed")
 
 # --- VERİTABANI BAĞLANTISI ---
@@ -31,17 +30,43 @@ if sayfa == "yonetim":
     
     if sifre == "avsar2026":
         st.success("Giriş Başarılı!")
-        st.subheader("Yeni Ürün Ekle veya Güncelle")
+        st.divider()
         
+        st.subheader("Ürün Düzenle veya Yeni Ekle")
+        st.info("💡 Var olan bir ürünü düzenlemek için stok kodunu aşağıya yazın ve Enter'a basın. Bilgiler otomatik dolacaktır.")
+        
+        # Ürün Çağırma Alanı
+        aranan_kod = st.text_input("Düzenlenecek Stok Kodunu Girin (Yeni ekleyecekseniz boş bırakın):")
+        
+        # Veritabanından mevcut ürünü çekme
+        mevcut_urun = None
+        if aranan_kod:
+            mevcut_urun = urun_getir(aranan_kod)
+            if mevcut_urun:
+                st.success(f"✅ {aranan_kod} kodlu ürün bulundu! Bilgileri aşağıdan güncelleyebilirsiniz.")
+            else:
+                st.warning(f"⚠️ {aranan_kod} kodlu ürün bulunamadı. Yeni bir ürün olarak ekleyebilirsiniz.")
+
+        # Form varsayılan değerleri (Ürün bulunduysa içini doldurur, yoksa boş bırakır)
+        def_kod = mevcut_urun[0] if mevcut_urun else aranan_kod
+        def_ad = mevcut_urun[1] if mevcut_urun else ""
+        def_olcu = mevcut_urun[2] if mevcut_urun else ""
+        def_malzeme = mevcut_urun[3] if mevcut_urun else ""
+        def_fiyat = float(mevcut_urun[4]) if mevcut_urun else 0.0
+        def_gorsel = mevcut_urun[5] if mevcut_urun else ""
+        def_detay = mevcut_urun[6] if mevcut_urun else ""
+        def_stok = int(mevcut_urun[7]) if mevcut_urun and mevcut_urun[7] is not None else 0
+
+        # Form Alanı
         with st.form("urun_formu"):
-            yeni_kod = st.text_input("Stok Kodu (Örn: DVL-OT-001)")
-            yeni_kategori = st.text_input("Kategori (Örn: Orta Tip Davlumbaz)")
-            yeni_olculer = st.text_input("Ölçüler (Örn: 200x90x50 cm)")
-            yeni_malzeme = st.text_input("Malzeme (Örn: 304 Kalite Paslanmaz Çelik)")
-            yeni_fiyat = st.number_input("Fiyat (₺)", min_value=0.0, format="%.2f")
-            yeni_gorsel = st.text_input("Görsel Yolu (Örn: gorseller/davlumbaz.png)")
-            yeni_detay = st.text_area("Teknik Detaylar")
-            yeni_stok = st.number_input("Stok Miktarı (Adet)", min_value=0, step=1, help="0 girerseniz ürün 'Yeni İmalat' olarak görünür.")
+            yeni_kod = st.text_input("Stok Kodu (Örn: EVY-2SA-160)", value=def_kod)
+            yeni_kategori = st.text_input("Kategori (Örn: Evyeli Tezgahlar)", value=def_ad)
+            yeni_olculer = st.text_input("Ölçüler (Örn: 160x70x85 cm)", value=def_olcu)
+            yeni_malzeme = st.text_input("Malzeme (Örn: 304 Kalite)", value=def_malzeme)
+            yeni_fiyat = st.number_input("Fiyat (₺)", min_value=0.0, format="%.2f", value=def_fiyat)
+            yeni_gorsel = st.text_input("Görsel Yolu (Örn: gorseller/evye.jpg)", value=def_gorsel)
+            yeni_detay = st.text_area("Teknik Detaylar", value=def_detay)
+            yeni_stok = st.number_input("Stok Miktarı (Adet)", min_value=0, step=1, value=def_stok)
             
             if st.form_submit_button("Ürünü Kaydet / Güncelle"):
                 if yeni_kod:
@@ -54,7 +79,7 @@ if sayfa == "yonetim":
                     ''', (yeni_kod, yeni_kategori, yeni_olculer, yeni_malzeme, yeni_fiyat, yeni_gorsel, yeni_detay, yeni_stok))
                     conn.commit()
                     conn.close()
-                    st.success(f"{yeni_kod} kodlu ürün veritabanına kaydedildi! (Stok: {yeni_stok})")
+                    st.success(f"{yeni_kod} kodlu ürün başarıyla veritabanına kaydedildi! (Stok: {yeni_stok})")
                 else:
                     st.error("Stok Kodu boş bırakılamaz!")
 
@@ -62,13 +87,12 @@ if sayfa == "yonetim":
 # 2. MÜŞTERİ / KAREKOD SAYFASI
 # ==========================================
 else:
-    # Sepet (Hafıza) Sistemi
     if 'sepet' not in st.session_state:
         st.session_state.sepet = []
 
     def sepete_ekle(kodu, adi, fiyat, stok_durumu):
         st.session_state.sepet.append({'kodu': kodu, 'adi': adi, 'fiyat': fiyat, 'durum': stok_durumu})
-        st.toast(f"✅ {adi} sepetinize eklendi!", icon="🛒") # Yukarıda şık bir bildirim çıkar
+        st.toast(f"✅ {adi} sepetinize eklendi!", icon="🛒") 
 
     def sepeti_temizle():
         st.session_state.sepet = []
@@ -77,11 +101,9 @@ else:
         urun = urun_getir(urun_kodu)
         
         if urun:
-            # Üst Başlık Kısmı - Ortalanmış ve şık
             st.markdown(f"<h1 style='text-align: center;'>{urun[1]}</h1>", unsafe_allow_html=True)
             st.markdown(f"<p style='text-align: center; color: gray; font-size: 18px;'>Stok Kodu: {urun[0]}</p>", unsafe_allow_html=True)
             
-            # Stok durumu yakalama
             try:
                 stok_adedi = int(urun[7]) if urun[7] is not None else 0
             except IndexError:
@@ -89,13 +111,10 @@ else:
                 
             stok_durum_metni = "Stoktan Teslim" if stok_adedi > 0 else "Yeni İmalat"
             
-            st.write("") # Boşluk
-            
-            # Sütunları bölme - Fotoğraf kısmı biraz daha geniş (1.3) ve aralarında geniş boşluk (gap="large") var
+            st.write("") 
             col1, col2 = st.columns([1.3, 1], gap="large")
             
             with col1:
-                # Görsel Kutusu
                 with st.container(border=True):
                     if os.path.exists(urun[5]):
                         st.image(urun[5], use_container_width=True)
@@ -108,20 +127,17 @@ else:
                     st.warning("⚙️ **Stok Durumu:** Sipariş Üzerine Üretilir")
                     
             with col2:
-                # Teknik Detaylar Kutusu
                 with st.container(border=True):
                     st.markdown("#### Teknik Özellikler")
                     st.markdown(f"**📏 Ölçüler:** {urun[2]}")
                     st.markdown(f"**🧱 Malzeme:** {urun[3]}")
                     st.markdown(f"**📋 Detaylar:** {urun[6]}")
                 
-                # Fiyat ve Sepet Kutusu
                 with st.container(border=True):
                     st.metric(label="Güncel Fiyat", value=f"{urun[4]:,.2f} ₺")
                     st.caption("*(Fiyatlara %20 KDV dahil değildir)*")
                     
                     st.write("")
-                    # type="primary" butonu daha belirgin yapar
                     if st.button("🛒 Teklif Sepetime Ekle", use_container_width=True, type="primary"):
                         sepete_ekle(urun[0], urun[1], urun[4], stok_durum_metni)
                         
@@ -134,12 +150,9 @@ else:
         st.title("Avşar Krom - Sistem Girişi")
         st.write("Lütfen ürün detaylarını görmek için bir ürün karekodu okutun.")
 
-    # --- DİNAMİK TEKLİF SEPETİ VE WHATSAPP GÖNDERİMİ ---
     if len(st.session_state.sepet) > 0:
         st.write("")
         st.write("")
-        
-        # Sepeti şık bir kutu içine alıyoruz
         with st.container(border=True):
             st.header("🛒 Teklif Sepetiniz")
             st.write("Seçtiğiniz ürünler aşağıda listelenmiştir.")
